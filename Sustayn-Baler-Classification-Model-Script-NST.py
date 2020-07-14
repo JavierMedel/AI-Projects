@@ -145,10 +145,10 @@ GROUP BY device_id;
 """
 
 # read data from db to DataFrame
-df = pd.read_sql_query(SQL1, ENGINE)
+df = pd.read_sql_query(SQL, ENGINE)
 print(df.shape)
-# # Analyse Dataset
 
+# # Analyse Dataset
 # filling the missing values
 df.fillna(0, inplace=True)
 
@@ -249,7 +249,7 @@ df['label_f'] = np.where(df['barcode_f'] == 0, 0, 1)
 
 df['image_f'] = np.where(df['img_url'] == 0, 0, 1)
 
-df.drop(columns=['DeviceType', 'DeviceCode', 'package_id', 'material_type', 'barcode', 'audit_date', 'audit_userid'],
+df.drop(columns=['DeviceType', 'package_id', 'material_type', 'barcode', 'audit_date', 'audit_userid'],
         inplace=True)
 
 # ## duplicates in manual audit
@@ -355,18 +355,31 @@ else:
     df['audit_status_nst'] = df['audit_status_valid']
     df['audit_reason'] = None
 
-    df['audit_status_nst'] = np.where(df['audit_status_valid'] == 'D', 'R', df['audit_status_valid'])
-
-    df['audit_reason'] = np.where(df['audit_status_valid'] == 'D', '8', df['audit_reason'])
     df['audit_reason'] = np.where(df['audit_status_valid'] == 'R', '9', df['audit_reason'])
     df['audit_reason'] = np.where((df['audit_status_valid'] == 'R') & (df['standard_weight_f'] <= 80), '4',
                                   df['audit_reason'])
 
+    # --------------------
+    # Mark the duplicate records
+    # --------------------
+    df['audit_status_nst'] = np.where(df['audit_status_valid'] == 'D', 'R', df['audit_status_valid'])
+    df['audit_reason'] = np.where(df['audit_status_valid'] == 'D', '8', df['audit_reason'])
+
+    # --------------------
+    # Records that with unknown material will mark as P for a manual audit
+    # --------------------
+    df['audit_status_nst'] = np.where(df['material_description_f'] == 'BALED OTHER', 'P', df['audit_status_nst'])
+    df['audit_reason'] = np.where(df['material_description_f'] == 'BALED OTHER', None, df['audit_reason'])
+
     df['process_date'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    df['process_date_manual'] = None
+    df['process_date_manual'] = df['process_date_manual'].astype('datetime64')
+    df['audit_status_manual'] = None
+
     # Reorder the order of the columns
-    df = df[['id', 'img_url', 'device_id', 'package_date',
-             'package_date_f', 'time_delta_f',
+    df = df[['id', 'img_url', 'device_id', 'device_code',
+             'package_date', 'package_date_f', 'time_delta_f',
              'material_description_from_original', 'material_description_f',
              'material_description_prev', 'material_description_after',
              'ir_original_class', 'ir_class', 'ir_confidence',
@@ -375,8 +388,21 @@ else:
              'audit_status_imgs', 'audit_status_pred', 'audit_duplicates_f',
              'audit_duplicates_groups', 'count_duplicates_groups',
              'duplicate_parent_id', 'audit_status_group', 'audit_status_valid',
-             'audit_userid', 'audit_status_nst', 'audit_reason', 'process_date',
-             'audit_status']]
+             'audit_userid', 'audit_status_nst', 'audit_reason',
+             'audit_status', 'process_date',
+             'process_date_manual', 'audit_status_manual']]
+
+    df.rename({'package_date_f': 'package_date_min',
+               'time_delta_f': 'time_delta_sec',
+               'material_description_f': 'material_description',
+               'standard_weight_f': 'standard_weight_kg',
+               'barcode_f': 'barcode',
+               'label_f': 'label_flag',
+               'image_f': 'image_flag',
+               'audit_status_pred': 'audit_status_ml',
+               'audit_duplicates_f': 'audit_duplicates_flag',
+               'audit_reason': 'audit_reason_nst'
+               }, axis='columns', inplace=True)
 
     df.to_sql(name='ml_baler_auto_audit', con=ENGINE, if_exists='append', index=False)
 
