@@ -8,6 +8,7 @@ from datetime import datetime
 
 # function to audit duplicates in a group
 def find_duplicates_in_groups(temp_df):
+
     temp_df['duplicate_parent_id'] = 'unique'
     temp_df['audit_status_group'] = np.where(
         (temp_df['audit_status_pred'] == 'A') & (temp_df['audit_status_imgs'] == 'A'), 'A', 'R')
@@ -32,8 +33,10 @@ def find_duplicates_in_groups(temp_df):
                 group_flag = False
                 upper_pointer = i
 
-                temp_df[lower_pointer + 1:upper_pointer + 1]['duplicate_parent_id'] = temp_df['id'].iloc[lower_pointer]
-                temp_df[lower_pointer: lower_pointer + 1]['duplicate_parent_id'] = 'parent'
+                # mark the parent of the duplicate items
+                temp_df.iloc[lower_pointer + 1:upper_pointer + 1, -2] = temp_df['id'].iloc[lower_pointer]
+                temp_df.iloc[lower_pointer, -2] = 'parent'
+
                 temp_df[lower_pointer: upper_pointer + 1]['count_duplicates_groups'] = len(
                     temp_df[lower_pointer: upper_pointer + 1])
 
@@ -112,40 +115,57 @@ sql_con_str = 'mysql+mysqldb://mercenary:Flxi8571@40.69.142.165:3306/Sustayn'  #
 # sql_con_str = 'mysql+mysqldb://mercenary:Flxi8571@52.173.202.38:3306/Sustayn'  # NST01 / DEV
 ENGINE = sa.create_engine(sql_con_str, pool_recycle=3600)
 
-# Stract the data from the DataBase
-
+# Stract the data from the Database
 
 # Query for first execution
 
-SQL1 = """
+SQL_first = """
 SELECT b.*
 FROM sustayn.v_ml_baler_productor_history b 
 WHERE b.package_date >= '2020-01-01 00:00:00'
 AND b.ir_class IS NOT NULL
-UNION
-SELECT DeviceType, Null, Null, max(package_date), device_id, Null, Null, Null, Null, NUll, Null, NUll, 'KG', 'AAA', Null, Null, Null, Null
-FROM sustayn.v_ml_baler_productor_history
-WHERE 1 = 1
-and package_date <= '2020-01-01 00:00:00'
-GROUP BY DeviceType, device_id;"""
+order by device_id desc, package_date asc;
+"""
+
+SQL_fist_audited = """
+SELECT 'Baler', Null, Null, max(package_date), device_id, Null, Null, Null, Null, NUll, Null, NUll, 'KG', 'AAA', Null, Null, Null, Null
+FROM sustayn.ml_baler_auto_audit
+WHERE package_date < '2020-01-01 00:00:00'
+GROUP BY device_id;
+"""
 
 # Query for daily execution
-
-SQL = """
+SQL_daily = """
 SELECT b.*
 FROM sustayn.v_ml_baler_productor_history b
 LEFT JOIN sustayn.ml_baler_auto_audit a ON b.id = a.id 
 WHERE b.package_date >= '2020-01-01 00:00:00'
 AND b.ir_class IS NOT NULL
 AND a.id IS NULL
-UNION
+order by device_id desc, package_date asc
+"""
+
+# Query to get the last execution per device
+SQL_daily_audited = """
 SELECT 'Baler', Null, Null, max(package_date), device_id, Null, Null, Null, Null, NUll, Null, NUll, 'KG', 'AAA', Null, Null, Null, Null
 FROM sustayn.ml_baler_auto_audit
+-- WHERE package_date < '2020-01-01 00:00:00'
 GROUP BY device_id;
 """
 
+# read data from db to DataFrame, last execution
+df_audited = pd.read_sql_query(SQL_daily_audited, ENGINE)
+df_audited.columns = ['DeviceType', 'id', 'img_url', 'package_date', 'device_id',
+       'device_code', 'package_id', 'barcode', 'material_type',
+       'material_description_from_original', 'ir_original_class', 'net_weight',
+       'unit', 'audit_status', 'audit_date', 'audit_userid', 'ir_class',
+       'ir_confidence']
+
 # read data from db to DataFrame
-df = pd.read_sql_query(SQL, ENGINE)
+df_src = pd.read_sql_query(SQL_daily, ENGINE)
+
+# concatenate the dataframes
+df = pd.concat([df_src, df_audited])
 print(df.shape)
 
 # # Analyse Dataset
@@ -160,7 +180,6 @@ df.sort_values(by=['device_id', 'package_date'], ascending=[True, True], inplace
 
 # reset index with the new order
 df.reset_index(inplace=True, drop=True)
-
 
 # # Create extra labels
 # ## material_description_from_original
