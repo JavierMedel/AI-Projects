@@ -1,9 +1,17 @@
 import pickle
+import os
+import time
 import mysql.connector
 import pandas as pd
 import numpy as np
 import sqlalchemy as sa
+from time import strftime
 from datetime import datetime
+
+# execution measure
+records_processed = -1
+records_inserted = -1
+start_time = datetime.now()
 
 
 # function to audit duplicates in a group
@@ -167,6 +175,7 @@ df_src = pd.read_sql_query(SQL_daily, ENGINE)
 # concatenate the dataframes
 df = pd.concat([df_src, df_audited])
 print(df.shape)
+records_processed = df.shape[0]
 
 # # Analyse Dataset
 # filling the missing values
@@ -423,6 +432,35 @@ else:
                'audit_reason': 'audit_reason_nst'
                }, axis='columns', inplace=True)
 
-    df.to_sql(name='ml_baler_auto_audit', con=ENGINE, if_exists='append', index=False)
+    #df.to_sql(name='ml_baler_auto_audit', con=ENGINE, if_exists='append', index=False)
+    records_inserted = df.shape[0]
 
     print('Execution completed, {} records inserted!'.format(len(df)))
+
+execution_path = os.path.abspath(os.getcwd())
+
+ended_time = datetime.now()
+elapsed_time = ended_time - start_time
+# print(ended_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3])
+
+
+execution_log = [['ML Baler Audit Automation',
+                  'v_ml_baler_productor_history',
+                  'ml_baler_auto_audit',
+                  start_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+                  ended_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+                  str(elapsed_time),
+                  records_processed,
+                  records_inserted,
+                  'Sustayn-Baler-Classification-Model-Script-NST.py',
+                  execution_path,
+                  'Execution OK']]
+
+columns_log = ['process_name', 'src_table', 'trg_table',
+               'time_started', 'time_finished', 'time_elapsed',
+               'records_processed', 'records_inserted',
+               'script_name', 'execution_path',
+               'comments']
+
+df_log = pd.DataFrame(execution_log, columns=columns_log)
+df_log.to_sql(name='ml_exec_logs', con=ENGINE, if_exists='append', index=False)
