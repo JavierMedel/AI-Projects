@@ -306,7 +306,8 @@ df['audit_status_imgs'] = np.where(df['ir_class'] != df['material_description_f'
 df['audit_status_imgs'].value_counts()
 
 # # Load Model
-pickle_in = open('./Baler_062920_ML_Classifier.pkl', 'rb')
+model_name = 'Sustayn-Baler-Classification-Model-062920.pkl'
+pickle_in = open('./' + model_name, 'rb')
 classifier = pickle.load(pickle_in)
 
 # # Dataset to predict
@@ -432,7 +433,7 @@ else:
                'audit_reason': 'audit_reason_nst'
                }, axis='columns', inplace=True)
 
-    #df.to_sql(name='ml_baler_auto_audit', con=ENGINE, if_exists='append', index=False)
+    df.to_sql(name='ml_baler_auto_audit', con=ENGINE, if_exists='append', index=False)
     records_inserted = df.shape[0]
 
     print('Execution completed, {} records inserted!'.format(len(df)))
@@ -453,13 +454,14 @@ execution_log = [['ML Baler Audit Automation',
                   records_processed,
                   records_inserted,
                   'Sustayn-Baler-Classification-Model-Script-NST.py',
+                  model_name,
                   execution_path,
                   'Execution OK']]
 
 columns_log = ['process_name', 'src_table', 'trg_table',
                'time_started', 'time_finished', 'time_elapsed',
                'records_processed', 'records_inserted',
-               'script_name', 'execution_path',
+               'script_name', 'model_name', 'execution_path',
                'comments']
 
 df_log = pd.DataFrame(execution_log, columns=columns_log)
