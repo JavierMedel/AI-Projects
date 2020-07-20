@@ -31,16 +31,15 @@ def load_image(imageURL):
         if img.format == 'GIF':
             if img.tile[0][1][-2:] == img.size:
                 img = img.convert('RGB')
-                img = img.resize((224, 224))
                 action_image = ''
         else:
             img = img.convert('RGB')
-            img = img.resize((224, 224))
             action_image = ''
 
     except Exception as spe:
         print('>>>> {} <<<<<'.format(acction_image))
 
+    img = img.resize((224, 224))
     img = img_to_array(img)
     img = img.reshape(1, 224, 224, 3)
 
@@ -48,36 +47,26 @@ def load_image(imageURL):
 # [END load image]
 
 
-def baler_validation(label_device, label_model):
-    if label_device == label_model:
-        return 'VALID'
-    else:
-        return 'INVALID'
-
-
 def main():
-    print('{}    {}'.format('' + datetime.now().strftime("%H:%M:%S.%f"),
-                            'SustaynMaterialClassification-NST script is initializating...'))
+    print('{}|    {}'.format('' + datetime.now().strftime("%H:%M:%S.%f"),
+                             'SustaynMaterialClassification-NST script is initializating...'))
 
-    model_name_baler = 'Sustayn-Image-Classification-Baler-Trained_Model-061622-03-Classes-5700-Samples.h5'
+    # model trained path
+    model_name = 'Sustayn-Image-Classification-Baler-Trained_Model-061622-03-Classes-5700-Samples.h5'
+    model_path = './' + model_name
 
-    model_location_baler = './' + model_name_baler
+    print('{}|    {} {}'.format(datetime.now().strftime("%H:%M:%S.%f"), 'Model Name:', model_name))
+    print('{}|    {} {}'.format(datetime.now().strftime("%H:%M:%S.%f"), 'Model Path:', model_path))
 
-    print('{}    {} {}'.format(datetime.now().strftime("%H:%M:%S.%f"), 'Loading Model for Baler devices:',
-                               model_name_baler))
-
-    print(model_location_baler)
-
-    model_baler = load_model(model_location_baler)
-
-    print('{}    {}'.format('' + datetime.now().strftime("%H:%M:%S.%f"),
-                            'Model loaded.... Reading Mapping categories...'))
+    print('{}|    {}'.format('' + datetime.now().strftime("%H:%M:%S.%f"), 'Loading Model...'))
+    model_baler = load_model(model_path)
+    print('{}|    {}'.format('' + datetime.now().strftime("%H:%M:%S.%f"), 'Model loaded!'))
 
     # Categories definition
     categories_baler = ['BALED CARDBOARD', 'BALED EMPTY', 'BALED FILM']
     categories_baler = sorted(categories_baler)
 
-    # SQL Query Definition
+    # SQL query definition
     SQL = '''
     SELECT lower(B.devicetype) as DeviceType,
         B.img_url,
@@ -98,21 +87,21 @@ def main():
     LIMIT 299;
     '''
 
-    # Create the SQL ENGINE to connect to the Database
-    print('{}    {}'.format('' + datetime.now().strftime("%H:%M:%S.%f"), 'Creating MySQL engine'))
+    # Create the SQL Engine to connect to the Database
+    print('{}|    {}'.format('' + datetime.now().strftime("%H:%M:%S.%f"), 'Creating MySQL Engine'))
     sql_con_str = 'mysql+mysqldb://mercenary:Flxi8571@40.69.142.165:3306/Sustayn'  # NST02 / PROD
     ENGINE = sa.create_engine(sql_con_str, pool_recycle=7200)
 
-    # Connect to the Database and create the Dataframe
-    print('{}    {}	{}'.format('' + datetime.now().strftime("%H:%M:%S.%f"), 'Reading data from MySQL:', ENGINE))
-    df = pd.read_sql_query(SQL, ENGINE)  # Read SQL query into a data frame
-    print('{}    {} {}'.format('' + datetime.now().strftime("%H:%M:%S.%f"), len(df), ' records read.'))
+    # Read SQL query into a data frame
+    print('{}|    {} {}'.format('' + datetime.now().strftime("%H:%M:%S.%f"), 'Reading data from MySQL:', ENGINE))
+    df = pd.read_sql_query(SQL, ENGINE)
+    print('{}|    {} {}'.format('' + datetime.now().strftime("%H:%M:%S.%f"), len(df), 'records read.'))
 
-    # URL Definition for Baler
+    # URL definition for Baler images
     url_baler = 'http://40.69.142.165/baler/imageAction.action?imageId='
 
-    print('{}    {} '.format(datetime.now().strftime('%H:%M:%S.%f'), 'Starting Prediction cycle...'))
-    print('Process Time | Check | Form | Prediction | URL | Package Date')
+    print('{}|    {} '.format(datetime.now().strftime('%H:%M:%S.%f'), 'Starting Prediction cycle...'))
+    print('{}| Check | Form | Prediction | URL | Package Date'.format(datetime.now().strftime('%H:%M:%S.%f')))
 
     list_df = []
     for count in range(len(df)):
@@ -125,16 +114,21 @@ def main():
         predicted_category = ''
         time_execution = ''
 
+        # create the url with the image_url
         image_url = url_baler + str(df['img_url'].loc[count])
+
+        # call the function to load the image
         img, action_image = load_image(image_url)
+
+        # apply the model to the image converted in an array
         result = model_baler.predict(img)
+
         predicted_category = categories_baler[np.argmax(result)]
         check = np.argmax(result)
         confidence_val = result[0][check]
 
-        action_image = baler_validation(str(df['MaterialClass_FromOriginal'].loc[count]), predicted_category)
-
-        time_execution = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        action_image = np.where(str(df['MaterialClass_FromOriginal'].loc[count]) ==
+                                str(df['MaterialClass_FromOriginal'].loc[count]), 'VALID', 'INVALID')
 
         list_df.append([image_url[-36:],
                         str(df['device_id'].loc[count]),
@@ -144,7 +138,7 @@ def main():
                         str(df['MaterialClass_FromOriginal'].loc[count]),
                         predicted_category,
                         confidence_val,
-                        time_execution,
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         action_image])
 
         print('{}| {}| {}| {} | {} |{}'.format(datetime.now().strftime('%H:%M:%S.%f'),
